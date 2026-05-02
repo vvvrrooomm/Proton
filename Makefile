@@ -44,7 +44,7 @@ ifneq ($(unstripped),)
 endif
 
 CONFIGURE_CMD := ../../configure.sh \
-	--build-name="$(_build_name)"
+	--build-name="$(_build_name)" --target-arch=arm64  --container-engine=container 
 
 ifneq ($(protonsdk_version),)
 CONFIGURE_CMD += --proton-sdk-image=registry.gitlab.steamos.cloud/proton/sniper/sdk:$(protonsdk_version)

@@ -21,7 +21,8 @@ fi
 
 sh_quote() {
         local quoted
-        quoted="$(printf '%q ' "$@")"; [[ $# -eq 0 ]] || echo "${quoted:0:-1}";
+        quoted="$(printf '%q ' "$@")"
+        [[ $# -eq 0 ]] || echo "${quoted% }"
 }
 err()      { echo >&2 "${COLOR_ERR}!!${COLOR_CLEAR} $*"; }
 stat()     { echo >&2 "${COLOR_STAT}::${COLOR_CLEAR} $*"; }
@@ -54,13 +55,25 @@ check_container_engine() {
         info "$1 is unable to run the container."
         return 1
     fi
+    if [[ "$1" == container* ]]; then
+      arg_docker_opts="--progress=none --cpus 8 --memory 32g"
+    fi
 
-    touch permission_check
-    local inner_uid="$($1 run -v "$(pwd):/test$CONTAINER_MOUNT_OPTS" \
+    touch $(pwd)/permission_check
+    ls -l $(pwd)/permission_check
+    echo "1" > permission_check
+    ls -l $(pwd)/permission_check
+    info "touch $(pwd)/permission_check"
+    local inner_uid_cmd="$1 run -v \"$(pwd):/test2$CONTAINER_MOUNT_OPTS\" \
                                             --rm $2 \
-                                            stat --format "%u" /test/permission_check 2>&1)"
+                                            stat --format \"%u\" /test2/permission_check 2>&1"
+    info "running $inner_uid_cmd"
+    local inner_uid=$( $1 run -v "$(pwd):/test2$CONTAINER_MOUNT_OPTS" --progress=none\
+                                            --rm $2 stat --format "%u" /test2/permission_check 2>&1)
+
     rm permission_check
 
+    info "DBEUG permission check output: $inner_uid"
     if [[ $inner_uid == *"Permission denied"* ]]; then
         err "The container cannot access files. Are you using SELinux?"
         die "Please read README.md and check your $1 setup works."
@@ -115,7 +128,7 @@ function configure() {
     info "No build name specified, using default: $build_name"
   fi
 
-  if [[ ${build_name,,} == *proton* ]]; then
+  if [[ ${build_name} == *proton* ]]; then
     internal_tool_name=${build_name}
   else
     internal_tool_name=${build_name}-proton
@@ -143,6 +156,8 @@ function configure() {
     CONTAINER_MOUNT_OPTS=:Z
   fi
 
+  
+
   if [[ -n "$arg_container_engine" ]]; then
     check_container_engine "$arg_container_engine" "$steamrt_image" || die "Specified container engine \"$arg_container_engine\" doesn't work"
   else
@@ -151,9 +166,15 @@ function configure() {
       arg_container_engine="docker"
     elif check_container_engine podman "$steamrt_image"; then
       arg_container_engine="podman"
+    elif check_container_engine container "$steamrt_image"; then
+      arg_container_engine="container"
     else
         die "${arg_container_engine:-Container engine discovery} has failed. Please fix your setup."
     fi
+  fi
+
+  if [[ "$arg_container_engine" = "container" ]]; then
+    arg_docker_opts="--progress=none  --cpus 8 --memory 32g"
   fi
 
   stat "Using $arg_container_engine."
